@@ -13,6 +13,8 @@ const CPU_PLAYER = PLAYER_WHITE;
 
 const GAME_MODE_PVP = "pvp";
 const GAME_MODE_CPU = "cpu";
+const AI_DIFFICULTY_HARD = "hard";
+const AI_DIFFICULTY_INSANE = "insane";
 
 const DIRECTIONS = [
   { dr: 0, dc: 1 },   // horizontal
@@ -23,11 +25,29 @@ const DIRECTIONS = [
 
 const WIN_SCORE = 1_000_000_000;
 const AI_TIMEOUT = "AI_TIMEOUT";
-const AI_CONFIG = {
-  timeLimitMs: 700,
-  candidateRadius: 2,
-  maxDepthEarly: 3,
-  maxDepthLate: 4,
+const AI_PROFILES = {
+  [AI_DIFFICULTY_HARD]: {
+    label: "Hard",
+    timeLimitMs: 700,
+    candidateRadius: 2,
+    maxDepthEarly: 3,
+    maxDepthLate: 4,
+    candidateLimitEarly: 12,
+    candidateLimitMid: 14,
+    candidateLimitLate: 18,
+    rootCandidateLimit: 24,
+  },
+  [AI_DIFFICULTY_INSANE]: {
+    label: "Insane",
+    timeLimitMs: 1400,
+    candidateRadius: 2,
+    maxDepthEarly: 4,
+    maxDepthLate: 5,
+    candidateLimitEarly: 14,
+    candidateLimitMid: 18,
+    candidateLimitLate: 22,
+    rootCandidateLimit: 30,
+  },
 };
 
 // ---- State ----
@@ -41,6 +61,7 @@ let soundEnabled = true;
 let audioCtx = null;
 let gameMode = GAME_MODE_PVP;
 let aiThinking = false;
+let aiDifficulty = AI_DIFFICULTY_HARD;
 
 // ---- DOM References ----
 const boardEl = document.getElementById("board");
@@ -48,6 +69,7 @@ const statusEl = document.getElementById("status");
 const moveCounterEl = document.getElementById("move-counter");
 const historyEl = document.getElementById("history");
 const modeBtn = document.getElementById("mode-btn");
+const difficultyBtn = document.getElementById("difficulty-btn");
 const restartBtn = document.getElementById("restart-btn");
 const undoBtn = document.getElementById("undo-btn");
 const soundBtn = document.getElementById("sound-btn");
@@ -75,10 +97,15 @@ function initGame() {
   aiThinking = false;
 
   updateModeButton();
+  updateDifficultyButton();
   renderCoordinates();
   renderBoard();
   updateStatus();
   renderHistory();
+}
+
+function getAIConfig() {
+  return AI_PROFILES[aiDifficulty];
 }
 
 // ---- Coordinate Labels ----
@@ -353,7 +380,7 @@ function getCandidateMoves() {
     return [{ row: center, col: center }];
   }
 
-  const radius = AI_CONFIG.candidateRadius;
+  const radius = getAIConfig().candidateRadius;
   const set = new Set();
   let hasAny = false;
 
@@ -382,9 +409,10 @@ function getCandidateMoves() {
 }
 
 function getCandidateLimit() {
-  if (moveCount < 10) return 12;
-  if (moveCount < 30) return 14;
-  return 18;
+  const cfg = getAIConfig();
+  if (moveCount < 10) return cfg.candidateLimitEarly;
+  if (moveCount < 30) return cfg.candidateLimitMid;
+  return cfg.candidateLimitLate;
 }
 
 function evaluatePattern(length, openEnds) {
@@ -499,7 +527,7 @@ function evaluateBoard(forPlayer) {
 }
 
 function ensureTime(startTime) {
-  if (performance.now() - startTime > AI_CONFIG.timeLimitMs) {
+  if (performance.now() - startTime > getAIConfig().timeLimitMs) {
     throw new Error(AI_TIMEOUT);
   }
 }
@@ -568,7 +596,8 @@ function searchRoot(depth, player, candidates, startTime) {
 }
 
 function computeBestMove(player) {
-  const candidates = rankCandidates(getCandidateMoves(), player, 24);
+  const cfg = getAIConfig();
+  const candidates = rankCandidates(getCandidateMoves(), player, cfg.rootCandidateLimit);
   if (candidates.length === 0) return null;
 
   const winningNow = findImmediateWinningMove(player, candidates);
@@ -579,7 +608,7 @@ function computeBestMove(player) {
   if (mustBlock) return mustBlock;
 
   const startTime = performance.now();
-  const maxDepth = moveCount < 16 ? AI_CONFIG.maxDepthEarly : AI_CONFIG.maxDepthLate;
+  const maxDepth = moveCount < 16 ? cfg.maxDepthEarly : cfg.maxDepthLate;
 
   let ordered = [...candidates];
   let bestMove = ordered[0];
@@ -617,11 +646,30 @@ function toggleGameMode() {
 
 function updateModeButton() {
   if (gameMode === GAME_MODE_CPU) {
-    modeBtn.textContent = "🤖 Vs Computer (Hard)";
+    modeBtn.textContent = "🤖 Vs Computer";
     modeBtn.classList.add("active-mode");
   } else {
     modeBtn.textContent = "🤝 Two Players";
     modeBtn.classList.remove("active-mode");
+  }
+}
+
+function toggleDifficulty() {
+  if (aiThinking || gameMode !== GAME_MODE_CPU) return;
+  aiDifficulty = aiDifficulty === AI_DIFFICULTY_HARD ? AI_DIFFICULTY_INSANE : AI_DIFFICULTY_HARD;
+  updateDifficultyButton();
+}
+
+function updateDifficultyButton() {
+  const label = AI_PROFILES[aiDifficulty].label;
+  difficultyBtn.textContent = `🎯 Difficulty: ${label}`;
+
+  if (gameMode === GAME_MODE_CPU) {
+    difficultyBtn.disabled = false;
+    difficultyBtn.classList.add("active-mode");
+  } else {
+    difficultyBtn.disabled = true;
+    difficultyBtn.classList.remove("active-mode");
   }
 }
 
@@ -658,7 +706,8 @@ function updateStatus(result) {
   moveCounterEl.textContent = `Move: ${moveCount}`;
 
   if (result === "thinking") {
-    statusEl.innerHTML = `<span class="status-piece white"></span> Computer is thinking...`;
+    const label = AI_PROFILES[aiDifficulty].label;
+    statusEl.innerHTML = `<span class="status-piece white"></span> Computer (${label}) is thinking...`;
     return;
   }
 
@@ -749,6 +798,7 @@ function toggleSound() {
 // ---- Event Listeners ----
 
 modeBtn.addEventListener("click", toggleGameMode);
+difficultyBtn.addEventListener("click", toggleDifficulty);
 restartBtn.addEventListener("click", initGame);
 undoBtn.addEventListener("click", undoMove);
 soundBtn.addEventListener("click", toggleSound);

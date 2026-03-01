@@ -389,6 +389,12 @@ main {
   transform: translateY(0);
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .btn.muted {
   color: var(--text-muted);
 }
