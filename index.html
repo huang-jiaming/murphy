@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>五子棋 — Gomoku</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>五子棋 <span class="subtitle">Gomoku</span></h1>
+  </header>
+
+  <main>
+    <div class="game-container">
+      <div class="board-area">
+        <div class="status-bar">
+          <span id="status">Black's turn</span>
+          <span id="move-counter">Move: 0</span>
+        </div>
+
+        <div class="board-wrapper">
+          <div class="col-labels" id="col-labels"></div>
+          <div class="board-with-rows">
+            <div class="row-labels" id="row-labels"></div>
+            <div id="board" class="board"></div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="mode-btn" class="btn" title="Toggle player vs computer">🤝 Two Players</button>
+          <button id="restart-btn" class="btn" title="Restart game">↻ Restart</button>
+          <button id="undo-btn" class="btn" title="Undo last move">↩ Undo</button>
+          <button id="sound-btn" class="btn" title="Toggle sound">🔊 Sound</button>
+        </div>
+      </div>
+
+      <aside class="history-panel">
+        <h2>Move History</h2>
+        <ol id="history"></ol>
+      </aside>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
