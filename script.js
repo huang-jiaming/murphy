@@ -28,25 +28,27 @@ const AI_TIMEOUT = "AI_TIMEOUT";
 const AI_PROFILES = {
   [AI_DIFFICULTY_HARD]: {
     label: "Hard",
-    timeLimitMs: 700,
-    candidateRadius: 2,
-    maxDepthEarly: 3,
-    maxDepthLate: 4,
-    candidateLimitEarly: 12,
-    candidateLimitMid: 14,
-    candidateLimitLate: 18,
-    rootCandidateLimit: 24,
-  },
-  [AI_DIFFICULTY_INSANE]: {
-    label: "Insane",
-    timeLimitMs: 1400,
+    timeLimitMs: 900,
+    minThinkMs: 260,
     candidateRadius: 2,
     maxDepthEarly: 4,
     maxDepthLate: 5,
     candidateLimitEarly: 14,
     candidateLimitMid: 18,
     candidateLimitLate: 22,
-    rootCandidateLimit: 30,
+    rootCandidateLimit: 28,
+  },
+  [AI_DIFFICULTY_INSANE]: {
+    label: "Insane",
+    timeLimitMs: 1800,
+    minThinkMs: 500,
+    candidateRadius: 3,
+    maxDepthEarly: 5,
+    maxDepthLate: 6,
+    candidateLimitEarly: 16,
+    candidateLimitMid: 22,
+    candidateLimitLate: 28,
+    rootCandidateLimit: 36,
   },
 };
 
@@ -354,11 +356,24 @@ function triggerComputerTurn() {
       return;
     }
 
+    const cfg = getAIConfig();
+    const thinkingStart = performance.now();
     const move = computeBestMove(CPU_PLAYER) || getFallbackMove();
-    aiThinking = false;
+    const elapsed = performance.now() - thinkingStart;
+    const remaining = Math.max(0, cfg.minThinkMs - elapsed);
 
-    if (!move) return;
-    applyMove(move.row, move.col);
+    setTimeout(() => {
+      if (gameOver || gameMode !== GAME_MODE_CPU || currentPlayer !== CPU_PLAYER) {
+        aiThinking = false;
+        renderBoard();
+        updateStatus();
+        return;
+      }
+
+      aiThinking = false;
+      if (!move) return;
+      applyMove(move.row, move.col);
+    }, remaining);
   }, 30);
 }
 
@@ -457,15 +472,58 @@ function evaluateMovePotential(row, col, player) {
   return total;
 }
 
+function countThreatsAfterMove(row, col, player) {
+  let threats = 0;
+
+  for (const { dr, dc } of DIRECTIONS) {
+    let chain = 1;
+    let openEnds = 0;
+
+    let nr = row + dr;
+    let nc = col + dc;
+    while (inBounds(nr, nc) && board[nr][nc] === player) {
+      chain++;
+      nr += dr;
+      nc += dc;
+    }
+    if (inBounds(nr, nc) && board[nr][nc] === 0) openEnds++;
+
+    nr = row - dr;
+    nc = col - dc;
+    while (inBounds(nr, nc) && board[nr][nc] === player) {
+      chain++;
+      nr -= dr;
+      nc -= dc;
+    }
+    if (inBounds(nr, nc) && board[nr][nc] === 0) openEnds++;
+
+    if (chain >= 5) threats += 8;
+    else if (chain === 4 && openEnds >= 1) threats += 4;
+    else if (chain === 3 && openEnds === 2) threats += 2;
+  }
+
+  return threats;
+}
+
 function scoreCandidate(move, player) {
   const opponent = getOpponent(player);
+
+  board[move.row][move.col] = player;
+  const isWinningMove = checkWinAt(move.row, move.col, player);
+  const threatCount = countThreatsAfterMove(move.row, move.col, player);
+  board[move.row][move.col] = 0;
+
+  if (isWinningMove) {
+    return WIN_SCORE;
+  }
+
   const attack = evaluateMovePotential(move.row, move.col, player);
   const defense = evaluateMovePotential(move.row, move.col, opponent);
   const center = (BOARD_SIZE - 1) / 2;
   const dist = Math.abs(move.row - center) + Math.abs(move.col - center);
   const centerBonus = BOARD_SIZE * 2 - dist;
 
-  return attack * 1.2 + defense * 1.05 + centerBonus;
+  return attack * 1.3 + defense * 1.15 + threatCount * 220_000 + centerBonus;
 }
 
 function rankCandidates(moves, player, limit = getCandidateLimit()) {
